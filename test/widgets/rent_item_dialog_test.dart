@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kreisel_frontend/models/item_model.dart';
 import 'package:kreisel_frontend/services/api_service.dart';
-import 'package:kreisel_frontend/widgets/rent_item_dialog.dart'; // Adjust import path as needed
+import 'package:kreisel_frontend/widgets/rent_item_dialog.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kreisel_frontend/models/user_model.dart';
@@ -173,9 +173,7 @@ void main() {
               onPressed: () {
                 showCupertinoDialog(
                   context: context,
-                  builder:
-                      (context) =>
-                          RentItemDialog(item: item, onRented: onRented),
+                  builder: (context) => RentItemDialog(item: item, onRented: onRented),
                 );
               },
               child: Text('Open Dialog'),
@@ -190,17 +188,14 @@ void main() {
     mockHttpClient = MockHttpClient();
     mockTokenStorage = MockTokenStorage();
 
-    // Set up mock token
     mockTokenStorage.setToken('test_token');
 
-    // Configure ApiService to use mocks
     ApiService.configure(
       httpClient: mockHttpClient,
       tokenStorage: mockTokenStorage,
       baseUrl: testBaseUrl,
     );
 
-    // Mock user data
     ApiService.currentUser = User(
       userId: 1,
       fullName: 'Test User',
@@ -208,226 +203,311 @@ void main() {
       role: 'USER',
     );
 
-    // Set up SharedPreferences mock
     SharedPreferences.setMockInitialValues({});
   });
 
   tearDown(() {
-    // Reset mocks
     mockHttpClient.reset();
-
-    // Reset ApiService to default
     ApiService.resetToDefault();
   });
 
-  group('RentItemDialog UI Tests', () {
-    testWidgets('displays item information correctly', (
-      WidgetTester tester,
-    ) async {
-      // ignore: unused_local_variable
-      bool rentCallbackCalled = false;
+  group('RentItemDialog Tests', () {
+    // Essential UI Tests
+    group('UI Tests', () {
+      testWidgets('displays item information correctly', (WidgetTester tester) async {
+        // ignore: unused_local_variable
+        bool rentCallbackCalled = false;
 
-      await tester.pumpWidget(
-        createTestWidget(
-          item: testItem,
-          onRented: () => rentCallbackCalled = true,
-        ),
-      );
+        await tester.pumpWidget(
+          createTestWidget(
+            item: testItem,
+            onRented: () => rentCallbackCalled = true,
+          ),
+        );
 
-      // Open the dialog
-      await tester.tap(find.text('Open Dialog'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
 
-      // Check if dialog title contains the item name
-      expect(find.text('Test Skis ausleihen'), findsOneWidget);
+        expect(find.text('Test Skis ausleihen'), findsOneWidget);
+        expect(find.text('Marke: Alpine Pro'), findsOneWidget);
+        expect(find.text('Größe: M'), findsOneWidget);
+        expect(find.text('Ausleihdauer wählen:'), findsOneWidget);
+        expect(find.text('1 Mnt.'), findsOneWidget);
+        expect(find.text('2 Mnte.'), findsOneWidget);
+        expect(find.text('3 Mnte.'), findsOneWidget);
+        expect(find.text('Abbrechen'), findsOneWidget);
+        expect(find.text('Jetzt ausleihen'), findsOneWidget);
+        expect(find.textContaining('Rückgabedatum:'), findsOneWidget);
+      });
 
-      // Check if item details are displayed
-      expect(find.text('Marke: Alpine Pro'), findsOneWidget);
-      expect(find.text('Größe: M'), findsOneWidget);
+      testWidgets('selecting different durations updates return date', (WidgetTester tester) async {
+        await tester.pumpWidget(
+          createTestWidget(item: testItem, onRented: () {}),
+        );
 
-      // Check for duration selection options
-      expect(find.text('Ausleihdauer wählen:'), findsOneWidget);
-      expect(find.text('1 Mnt.'), findsOneWidget);
-      expect(find.text('2 Mnte.'), findsOneWidget);
-      expect(find.text('3 Mnte.'), findsOneWidget);
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
 
-      // Check for buttons
-      expect(find.text('Abbrechen'), findsOneWidget);
-      expect(find.text('Jetzt ausleihen'), findsOneWidget);
+        final initialDateText = (tester.widget(find.textContaining('Rückgabedatum:')) as Text).data;
 
-      // Check for return date
-      expect(find.textContaining('Rückgabedatum:'), findsOneWidget);
+        await tester.tap(find.text('2 Mnte.'));
+        await tester.pumpAndSettle();
+
+        final updatedDateText = (tester.widget(find.textContaining('Rückgabedatum:')) as Text).data;
+
+        expect(initialDateText != updatedDateText, true);
+      });
+
+      testWidgets('handles item with missing optional fields', (WidgetTester tester) async {
+        final itemWithoutBrandSize = Item(
+          id: 456,
+          name: 'Basic Item',
+          available: true,
+          location: 'PASING',
+          gender: 'UNISEX',
+          category: 'EQUIPMENT',
+          subcategory: 'HELME',
+          zustand: 'NEU',
+        );
+
+        await tester.pumpWidget(
+          createTestWidget(item: itemWithoutBrandSize, onRented: () {}),
+        );
+
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Basic Item ausleihen'), findsOneWidget);
+        expect(find.text('Marke:'), findsNothing);
+        expect(find.text('Größe:'), findsNothing);
+      });
     });
 
-    testWidgets('selecting different durations updates return date', (
-      WidgetTester tester,
-    ) async {
-      await tester.pumpWidget(
-        createTestWidget(item: testItem, onRented: () {}),
-      );
+    // Cancel Button Coverage
+    group('Cancel Tests', () {
+      testWidgets('cancel button closes the dialog without renting', (WidgetTester tester) async {
+        bool rentCallbackCalled = false;
 
-      // Open the dialog
-      await tester.tap(find.text('Open Dialog'));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          createTestWidget(
+            item: testItem,
+            onRented: () => rentCallbackCalled = true,
+          ),
+        );
 
-      // Initial date (1 month)
-      final initialDateText =
-          (tester.widget(find.textContaining('Rückgabedatum:')) as Text).data;
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
 
-      // Select 2 months
-      await tester.tap(find.text('2 Mnte.'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Abbrechen'));
+        await tester.pumpAndSettle();
 
-      // Get updated date text
-      final updatedDateText =
-          (tester.widget(find.textContaining('Rückgabedatum:')) as Text).data;
-
-      // Dates should be different
-      expect(initialDateText != updatedDateText, true);
-
-      // Select 3 months
-      await tester.tap(find.text('3 Mnte.'));
-      await tester.pumpAndSettle();
-
-      // Get new updated date text
-      final finalDateText =
-          (tester.widget(find.textContaining('Rückgabedatum:')) as Text).data;
-
-      // All dates should be different
-      expect(initialDateText != finalDateText, true);
-      expect(updatedDateText != finalDateText, true);
-    });
-  });
-
-  group('Rent Item Functionality Tests', () {
-    
-
-    
-
-    testWidgets('unauthorized rental shows login error', (
-      WidgetTester tester,
-    ) async {
-      // ignore: unused_local_variable
-      bool rentCallbackCalled = false;
-
-      // Set up mock response for unauthorized rental
-      mockHttpClient.setResponse(
-        'rentItem',
-        http.Response('{"message": "Unauthorized"}', 401),
-      );
-
-      await tester.pumpWidget(
-        createTestWidget(
-          item: testItem,
-          onRented: () => rentCallbackCalled = true,
-        ),
-      );
-
-      // Open the dialog
-      await tester.tap(find.text('Open Dialog'));
-      await tester.pumpAndSettle();
-
-      // Tap the rent button
-      await tester.tap(find.text('Jetzt ausleihen'));
-      await tester.pump(); // Start loading state
-      await tester.pumpAndSettle(); // Wait for operation to complete
-
-      // Check for error dialog with login message
-      expect(find.text('Fehler beim Ausleihen'), findsOneWidget);
-      expect(find.textContaining('Session abgelaufen'), findsOneWidget);
-
-      // Check that token was cleared
-      expect(await mockTokenStorage.getToken(), isNull);
+        expect(find.text('Test Skis ausleihen'), findsNothing);
+        expect(mockHttpClient.requests.isEmpty, true);
+        expect(rentCallbackCalled, false);
+      });
     });
 
-    testWidgets('cancel button closes the dialog without renting', (
-      WidgetTester tester,
-    ) async {
-      bool rentCallbackCalled = false;
+    // Success Path Coverage (Critical for Coverage)
+    group('Success Path Tests', () {
+      testWidgets('successful rental shows success dialog and calls onRented callback', (WidgetTester tester) async {
+        bool rentCallbackCalled = false;
 
-      await tester.pumpWidget(
-        createTestWidget(
-          item: testItem,
-          onRented: () => rentCallbackCalled = true,
-        ),
-      );
+        mockHttpClient.setResponse(
+          'rentItem',
+          http.Response('{"message": "Success"}', 200),
+        );
 
-      // Open the dialog
-      await tester.tap(find.text('Open Dialog'));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          createTestWidget(
+            item: testItem,
+            onRented: () => rentCallbackCalled = true,
+          ),
+        );
 
-      // Tap the cancel button
-      await tester.tap(find.text('Abbrechen'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
 
-      // Dialog should be closed
-      expect(find.text('Test Skis ausleihen'), findsNothing);
+        expect(find.text('Test Skis ausleihen'), findsOneWidget);
 
-      // API should not have been called
-      expect(mockHttpClient.requests.isEmpty, true);
-      expect(rentCallbackCalled, false);
+        await tester.tap(find.text('Jetzt ausleihen'));
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        // Success dialog coverage
+        expect(find.text('Erfolgreich ausgeliehen'), findsOneWidget);
+        expect(find.textContaining('Test Skis wurde bis zum'), findsOneWidget);
+        expect(find.textContaining('reserviert.'), findsOneWidget);
+        expect(rentCallbackCalled, isTrue);
+        expect(find.text('Test Skis ausleihen'), findsNothing);
+
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Erfolgreich ausgeliehen'), findsNothing);
+      });
+
+      testWidgets('successful rental with 2 months duration', (WidgetTester tester) async {
+        bool rentCallbackCalled = false;
+
+        mockHttpClient.setResponse(
+          'rentItem',
+          http.Response('{"message": "Success"}', 200),
+        );
+
+        await tester.pumpWidget(
+          createTestWidget(
+            item: testItem,
+            onRented: () => rentCallbackCalled = true,
+          ),
+        );
+
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('2 Mnte.'));
+        await tester.pump();
+
+        await tester.tap(find.text('Jetzt ausleihen'));
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(find.text('Erfolgreich ausgeliehen'), findsOneWidget);
+        expect(rentCallbackCalled, isTrue);
+      });
+
+      testWidgets('successful rental with 3 months duration', (WidgetTester tester) async {
+        bool rentCallbackCalled = false;
+
+        mockHttpClient.setResponse(
+          'rentItem',
+          http.Response('{"message": "Success"}', 200),
+        );
+
+        await tester.pumpWidget(
+          createTestWidget(
+            item: testItem,
+            onRented: () => rentCallbackCalled = true,
+          ),
+        );
+
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('3 Mnte.'));
+        await tester.pump();
+
+        await tester.tap(find.text('Jetzt ausleihen'));
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(find.text('Erfolgreich ausgeliehen'), findsOneWidget);
+        expect(rentCallbackCalled, isTrue);
+      });
     });
 
-    testWidgets('handles item with missing optional fields', (
-      WidgetTester tester,
-    ) async {
-      final itemWithoutBrandSize = Item(
-        id: 456,
-        name: 'Basic Item',
-        available: true,
-        location: 'PASING',
-        gender: 'UNISEX',
-        category: 'EQUIPMENT',
-        subcategory: 'HELME',
-        zustand: 'NEU',
-      );
+    // Error Handling Coverage
+    group('Error Handling Tests', () {
+      testWidgets('unauthorized rental shows login error', (WidgetTester tester) async {
+        // ignore: unused_local_variable
+        bool rentCallbackCalled = false;
 
-      await tester.pumpWidget(
-        createTestWidget(item: itemWithoutBrandSize, onRented: () {}),
-      );
+        mockHttpClient.setResponse(
+          'rentItem',
+          http.Response('{"message": "Unauthorized"}', 401),
+        );
 
-      // Open the dialog
-      await tester.tap(find.text('Open Dialog'));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          createTestWidget(
+            item: testItem,
+            onRented: () => rentCallbackCalled = true,
+          ),
+        );
 
-      // Check that dialog still opens with required fields
-      expect(find.text('Basic Item ausleihen'), findsOneWidget);
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
 
-      // Optional fields should not appear
-      expect(find.text('Marke:'), findsNothing);
-      expect(find.text('Größe:'), findsNothing);
-    });
+        await tester.tap(find.text('Jetzt ausleihen'));
+        await tester.pump();
+        await tester.pumpAndSettle();
 
-    
+        expect(find.text('Fehler beim Ausleihen'), findsOneWidget);
+        expect(find.textContaining('Session abgelaufen'), findsOneWidget);
+        expect(await mockTokenStorage.getToken(), isNull);
+      });
 
-    testWidgets('handles forbidden status with correct error message', (
-      WidgetTester tester,
-    ) async {
-      // Set up mock response for forbidden status
-      mockHttpClient.setResponse(
-        'rentItem',
-        http.Response('{"message": "Access denied"}', 403),
-      );
+      testWidgets('handles forbidden status with correct error message', (WidgetTester tester) async {
+        mockHttpClient.setResponse(
+          'rentItem',
+          http.Response('{"message": "Access denied"}', 403),
+        );
 
-      await tester.pumpWidget(
-        createTestWidget(item: testItem, onRented: () {}),
-      );
+        await tester.pumpWidget(
+          createTestWidget(item: testItem, onRented: () {}),
+        );
 
-      // Open the dialog
-      await tester.tap(find.text('Open Dialog'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
 
-      // Tap the rent button
-      await tester.tap(find.text('Jetzt ausleihen'));
-      await tester.pump(); // Start loading state
-      await tester.pumpAndSettle(); // Wait for operation to complete
+        await tester.tap(find.text('Jetzt ausleihen'));
+        await tester.pump();
+        await tester.pumpAndSettle();
 
-      // Check for error dialog with permission message
-      expect(find.text('Fehler beim Ausleihen'), findsOneWidget);
-      expect(find.textContaining('Keine Berechtigung'), findsOneWidget);
+        expect(find.text('Fehler beim Ausleihen'), findsOneWidget);
+        expect(find.textContaining('Keine Berechtigung'), findsOneWidget);
+        expect(await mockTokenStorage.getToken(), isNull);
+      });
 
-      // Check that token was cleared due to 403 status
-      expect(await mockTokenStorage.getToken(), isNull);
+      testWidgets('error dialog OK button closes dialog properly', (WidgetTester tester) async {
+        mockHttpClient.setResponse(
+          'rentItem',
+          http.Response('{"message": "Test error"}', 400),
+        );
+
+        await tester.pumpWidget(
+          createTestWidget(item: testItem, onRented: () {}),
+        );
+
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Jetzt ausleihen'));
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(find.text('Fehler beim Ausleihen'), findsOneWidget);
+        expect(find.textContaining('Test error'), findsOneWidget);
+
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Fehler beim Ausleihen'), findsNothing);
+      });
+
+      testWidgets('error dialog with network error shows and closes properly', (WidgetTester tester) async {
+        mockHttpClient.setResponse(
+          'rentItem',
+          http.Response('{"message": "Network error"}', 500),
+        );
+
+        await tester.pumpWidget(
+          createTestWidget(item: testItem, onRented: () {}),
+        );
+
+        await tester.tap(find.text('Open Dialog'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Jetzt ausleihen'));
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(find.text('Fehler beim Ausleihen'), findsOneWidget);
+        expect(find.text('OK'), findsOneWidget);
+
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Fehler beim Ausleihen'), findsNothing);
+      });
     });
   });
 }
