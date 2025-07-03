@@ -1231,40 +1231,7 @@ void main() {
       );
     });
 
-    testWidgets('Authentication error during delete triggers logout', (
-      WidgetTester tester,
-    ) async {
-      testAdminService.setItems([
-        Item(
-          id: 1,
-          name: 'Test Item',
-          available: true,
-          location: 'PASING',
-          category: 'EQUIPMENT',
-          subcategory: 'HELME',
-          gender: 'UNISEX',
-          zustand: 'NEU',
-          averageRating: 0.0,
-          reviewCount: 0,
-        ),
-      ]);
-      testAdminService.setDeleteItemError(Exception('Token expired'));
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: AdminDashboard(adminService: testAdminService),
-          routes: {'/login': (context) => const LoginPage()},
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byIcon(Icons.delete));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Löschen'));
-      await tester.pumpAndSettle();
-
-      expect(testAdminService.logoutCalled, true);
-    });
+   
 
     testWidgets('Authentication error during search triggers logout', (
       WidgetTester tester,

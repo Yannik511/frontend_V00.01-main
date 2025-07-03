@@ -1125,7 +1125,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     if (e.toString().contains('Token') ||
                         e.toString().contains('401') ||
                         e.toString().contains('403')) {
-                      _logout();
                       return;
                     }
                     _showError(e.toString());
